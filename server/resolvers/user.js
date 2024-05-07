@@ -13,19 +13,26 @@ exports.usersResolvers = {
         throw new Error("Could not fetch users");
       }
     },
+    getUser: async () => {
+      try {
+        const users = await User.find();
+        return users;
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        throw new Error("Could not fetch users");
+      }
+    },
   },
   Mutation: {
     UserSignup: async (_, args) => {
       const { fname, lname, email, password, pnumber, username } = args.input;
-
-      // console.log(fname, lname, email, password, pnumber, username);
 
       try {
         const existingUser = await User.findOne({ email });
         if (existingUser) {
           return {
             success: false,
-            message: "Could not create user",
+            message: "User with this email already exists",
           };
         }
 
@@ -42,7 +49,7 @@ exports.usersResolvers = {
           followers: 0,
         });
 
-        const savedUser = await newUser.save();
+        await newUser.save();
 
         return {
           success: true,
@@ -59,22 +66,18 @@ exports.usersResolvers = {
 
     UserSignin: async (_, args) => {
       const { email, password } = args.input;
-      // console.log(email, password);
 
       try {
         const user = await User.findOne({ email });
 
-        // console.log(user);
-
         if (!user) {
-          throw new Error("Invalid email, User not found");
+          throw new Error("Invalid email or password");
         }
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
-        // console.log(isPasswordValid);
 
         if (!isPasswordValid) {
-          throw new Error("Invalid password");
+          throw new Error("Invalid email or password");
         }
 
         const token = jwt.sign(
@@ -82,12 +85,37 @@ exports.usersResolvers = {
           process.env.JWT_SECRET_KEY_USER,
           { expiresIn: "1d" }
         );
-        // console.log(token);
 
         return { token };
       } catch (error) {
         console.error("Error signing in user:", error);
         throw new Error("Could not sign in user");
+      }
+    },
+
+    UserFollow: async (_, args) => {
+      const { email } = args.input;
+
+      try {
+        const user = await User.findOne({ email });
+
+        if (!user) {
+          throw new Error("User not found");
+        }
+
+        user.follows += 1;
+        await user.save();
+
+        return {
+          success: true,
+          message: "User follows updated successfully",
+        };
+      } catch (error) {
+        console.error("Error updating user follows:", error);
+        return {
+          success: false,
+          message: "Could not update user follows",
+        };
       }
     },
   },

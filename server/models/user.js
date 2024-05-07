@@ -35,6 +35,9 @@ const userSchema = new Schema({
   followers: {
     type: Number,
   },
+  profilePhoto: {
+    type: String,
+  },
 });
 
 module.exports = mongoose.model("User", userSchema);

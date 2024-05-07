@@ -28,6 +28,7 @@ const SignUpForm = () => {
     password: "",
     pnumber: "",
     username: "",
+    profilePhoto: null,
   });
   const [isShowpass, setIsShowpass] = useState(false);
   const [isAlert, setIsAlert] = useState(null);
@@ -42,10 +43,19 @@ const SignUpForm = () => {
   }, []);
 
   const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    // console.log(e.target.name);
+    if (e.target.name === "profilePhoto") {
+      // console.log(e.target.files[0]);
+      setFormData({
+        ...formData,
+        [e.target.name]: e.target.files[0],
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [e.target.name]: e.target.value,
+      });
+    }
   };
 
   const ShowPassHandler = () => {
@@ -55,7 +65,7 @@ const SignUpForm = () => {
   const [signup, { loading, error, data }] = useMutation(SIGN_UP_MUTATION, {
     onError: (error) => console.error("Error:", error.message),
     onCompleted: async (data) => {
-      console.log("Sign-up successful:", data);
+      // console.log("Sign-up successful:", data);
 
       router.push("/sign-in");
     },
@@ -64,18 +74,35 @@ const SignUpForm = () => {
   const handleSignup = async (e) => {
     e.preventDefault();
 
-    signup({
-      variables: {
-        input: {
-          fname: formData.fname,
-          lname: formData.lname,
-          pnumber: parseInt(formData.pnumber),
-          email: formData.email,
-          username: formData.username,
-          password: formData.password,
+    if (!formData.profilePhoto) {
+      console.error("Please select a profile photo");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.readAsDataURL(formData.profilePhoto);
+
+    reader.onload = async () => {
+      const base64String = reader.result.split(",")[1];
+
+      signup({
+        variables: {
+          input: {
+            fname: formData.fname,
+            lname: formData.lname,
+            pnumber: parseInt(formData.pnumber),
+            email: formData.email,
+            username: formData.username,
+            password: formData.password,
+            profilePhoto: base64String,
+          },
         },
-      },
-    });
+      });
+    };
+
+    reader.onerror = (error) => {
+      console.error("Error reading the file:", error);
+    };
   };
 
   return (
@@ -146,6 +173,16 @@ const SignUpForm = () => {
               onChange={handleInputChange}
               margin="normal"
               variant="outlined"
+            />
+            <TextField
+              type="file"
+              name="profilePhoto"
+              // label="Profile Photo"
+              fullWidth
+              onChange={handleInputChange}
+              margin="normal"
+              variant="outlined"
+              inputProps={{ accept: "image/*" }}
             />
             <TextField
               type={isShowpass ? "text" : "password"}

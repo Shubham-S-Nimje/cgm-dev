@@ -13,7 +13,7 @@ dotenv.config();
 const mongoose = require("mongoose");
 
 const server = new ApolloServer({
-  typeDefs: `
+  typeDefs: ` 
     type User {
       id: ID!
       fname: String!
@@ -24,6 +24,7 @@ const server = new ApolloServer({
       username: String!
       follows: Int!
       followers: Int!
+      profilePhoto: String!
     }
 
     input UserSignup {
@@ -33,6 +34,7 @@ const server = new ApolloServer({
       password: String!
       pnumber: Int!
       username: String!
+      profilePhoto: String!
     }
 
     input UserSignin {
@@ -40,17 +42,40 @@ const server = new ApolloServer({
      password: String!
     }
 
+    input UserFollow {
+      email: String!
+      token: String!
+    }
+
     type AuthPayload {
       token: String!
     }
 
+    type Status {
+      success: Boolean!
+    }
+
+    type UserWithoutPassword {
+      _id: ID!
+      fname: String!
+      lname: String!
+      email: String!
+      pnumber: Int!
+      username: String!
+      follows: Int!
+      followers: Int!
+      profilePhoto: String!
+    }
+
     type Query {
       getUsers: [User]
+      getUser(token: String!): UserWithoutPassword!
     }
 
     type Mutation {
       UserSignup(input: UserSignup!): AuthPayload!
       UserSignin(input: UserSignin!): AuthPayload!
+      UserFollow(input: UserFollow!): Status!
     }
   `,
   resolvers: {
@@ -64,10 +89,53 @@ const server = new ApolloServer({
           throw new Error("Could not fetch users");
         }
       },
+      getUser: async (_, { token }) => {
+        // console.log(token);
+        if (!token) {
+          throw new AuthenticationError("Authentication token is required");
+        }
+
+        try {
+          const decodedToken = jwt.verify(
+            token,
+            process.env.JWT_SECRET_KEY_USER
+          );
+
+          // console.log(decodedToken);
+
+          const user = await User.findOne({ email: decodedToken.email });
+          if (!user) {
+            throw new Error("User not found");
+          }
+          // console.log(user);
+          return {
+            _id: user._id,
+            fname: user.fname,
+            lname: user.lname,
+            email: user.email,
+            pnumber: user.pnumber,
+            username: user.username,
+            follows: user.follows,
+            followers: user.followers,
+            profilePhoto: user.profilePhoto,
+          };
+        } catch (error) {
+          console.error("Error fetching user:", error);
+          throw new Error("Could not fetch user");
+        }
+      },
     },
     Mutation: {
       UserSignup: async (_, args) => {
-        const { fname, lname, email, password, pnumber, username } = args.input;
+        const {
+          fname,
+          lname,
+          email,
+          password,
+          pnumber,
+          username,
+          profilePhoto,
+        } = args.input;
 
         // console.log(fname, lname, email, password, pnumber, username);
 
@@ -94,6 +162,7 @@ const server = new ApolloServer({
             username,
             follows: 0,
             followers: 0,
+            profilePhoto,
           });
 
           const savedUser = await newUser.save();
@@ -141,6 +210,47 @@ const server = new ApolloServer({
           throw new Error("Could not sign in user");
         }
       },
+
+      UserFollow: async (_, args) => {
+        const { token, email } = args.input;
+
+        try {
+          // Verify the token and get the current user
+          const decodedToken = jwt.verify(
+            token,
+            process.env.JWT_SECRET_KEY_USER
+          );
+          const currentUser = await User.findOne({ email: decodedToken.email });
+
+          if (!currentUser) {
+            throw new Error("User not found");
+          }
+
+          // Find the user to follow
+          const userToFollow = await User.findOne({ email });
+
+          if (!userToFollow) {
+            throw new Error("User to follow not found");
+          }
+
+          // Update the current user's follows count
+          await User.updateOne(
+            { _id: currentUser._id },
+            { $inc: { follows: 1 } }
+          );
+
+          // Update the user to follow's followers count
+          await User.updateOne(
+            { _id: userToFollow._id },
+            { $inc: { followers: 1 } }
+          );
+
+          return { success: true };
+        } catch (error) {
+          console.error("Error following user:", error);
+          throw new Error("Could not follow user");
+        }
+      },
     },
   },
 });
@@ -148,7 +258,9 @@ const server = new ApolloServer({
 const startServer = async () => {
   const app = express();
 
-  app.use(bodyParser.json());
+  app.use(bodyParser.json({ limit: "10mb" }));
+  app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
+
   app.use(
     cors({
       origin: "http://localhost:3000",
